@@ -1,0 +1,217 @@
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { useEffect, useState, type FormEvent } from "react";
+import { z } from "zod";
+import { themeStyle } from "@/lib/theme";
+import { CatSticker, Daisy, DemoNotice, Petals, Tulip } from "@/components/Decor";
+import { Button } from "@/components/ui/button";
+import { useGlobalMusic } from "@/components/GlobalMusic";
+import { Portrait } from "@/components/Portrait";
+import { catPhotos } from "@/lib/gift-assets";
+import { SITE_NAME, MAX_REPLY, addReply, clearProgress, fillNickname, findByName, verifyKeyword, getDraft, getProfile, getSettings, recordOpen, saveDraft, saveProgress, saveSession, defaultSettings, type Profile, type Progress, type Settings } from "@/lib/store";
+const TITLE = SITE_NAME;
+const DESC = "Một chút hoa, một chút meo, một lời chúc dành riêng cho bạn nhân ngày Phụ nữ Việt Nam 20/10.";
+
+export const Route = createFileRoute("/")({
+  validateSearch: z.object({ preview: z.string().optional() }),
+  head: () => ({
+    meta: [
+      { title: TITLE },
+      { name: "description", content: DESC },
+      { property: "og:title", content: TITLE },
+      { property: "og:description", content: DESC },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
+    ],
+  }),
+  component: Index,
+});
+
+type Step = "landing" | "login" | "keyword" | "gifts" | "letter";
+
+function Index() {
+  const { preview } = Route.useSearch();
+  const [settings, setSettings] = useState<Settings>(defaultSettings);
+  const [step, setStep] = useState<Step>("landing");
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [progress, setProgress] = useState<Progress | null>(null);
+  const music = useGlobalMusic();
+  const isPreview = !!preview;
+  useEffect(() => {
+    setSettings(getSettings());
+    // Read/migrate profiles, but never restore an unlocked browser session.
+    if (preview) {
+      const p = getProfile(preview);
+      if (p) { setProfile(p); setProgress({ version: 2, nickname: "Bạn xem thử", step: "gifts", attempts: 0, verified: false, cat: null }); setStep("gifts"); }
+    } else { getProfile(""); saveSession(null); }
+  }, [preview]);
+  const update = (patch: Partial<Progress>) => {
+    if (!profile || !progress) return;
+    const next = { ...progress, ...patch }; setProgress(next); setStep(next.step);
+    if (!isPreview) saveProgress(profile.id, next);
+  };
+  const logout = () => {
+    music.reset();
+    if (profile && !isPreview) clearProgress(profile.id);
+    if (!isPreview) saveSession(null);
+    setProfile(null); setProgress(null); setStep("landing");
+  };
+  const unlocked = !!progress?.verified || isPreview;
+  return <div style={themeStyle(settings)} className="relative min-h-screen overflow-x-hidden">
+    <Petals enabled={settings.confetti} />
+    <header className="relative z-10 mx-auto flex max-w-3xl items-center justify-between gap-3 px-5 pt-5">
+      <Button variant="ghost" onClick={isPreview ? undefined : logout} className="h-auto min-w-0 justify-start whitespace-normal p-0 text-left" aria-label="Về trang đầu"><Daisy className="h-9 w-9 shrink-0" /><span><span className="block font-display text-sm font-bold sm:text-lg">{SITE_NAME}</span><span className="font-hand text-base text-muted-foreground">{settings.brandSubtitle}</span></span></Button>
+      {isPreview ? <span className="text-xs font-semibold text-accent-foreground">Xem trước · không tính thống kê</span> : <Link to="/admin" className="text-xs text-muted-foreground hover:underline">Quản trị demo</Link>}
+    </header>
+    <main className="relative z-10 mx-auto max-w-3xl px-5 pb-16 pt-6">
+      {step === "landing" ? <Landing onStart={() => setStep("login")} /> : step === "login" ? <Login onBack={logout} onSuccess={(p, nickname) => {
+        music.reset(); const pr: Progress = { version: 2, nickname, step: "keyword", attempts: 0, verified: false, cat: null };
+        setProfile(p); setProgress(pr); setStep("keyword"); saveProgress(p.id, pr); saveSession({ profileId: p.id });
+      }} /> : profile && progress ? <>
+        {step === "keyword" && <Keyword profile={profile} progress={progress} onBack={logout} onWrong={() => update({ attempts: progress.attempts + 1 })} onSuccess={() => {
+          music.unlock(profile); update({ verified: true, step: "gifts" });
+        }} />}
+        {unlocked && step === "gifts" && <Gifts profile={profile} onOpen={cat => { if (!isPreview && progress.cat === null) recordOpen(profile.id); update({ cat, step: "letter" }); }} />}
+        {unlocked && step === "letter" && <Letter profile={profile} progress={progress} settings={settings} isPreview={isPreview} onReopen={() => update({ step: "gifts" })} onExit={logout} />}
+      </> : <p>Không tìm thấy hồ sơ để xem trước.</p>}
+      {step !== "landing" && <DemoNotice className="mt-6" />}
+    </main>
+  </div>;
+}
+function Landing({ onStart }: { onStart: () => void }) {
+  return <section className="animate-pop flex flex-col items-center text-center">
+    <div className="relative flex items-end gap-3"><Tulip className="h-24 w-10" /><img src={catPhotos[0]?.url} alt={catPhotos[0]?.alt} className="h-56 w-48 rotate-[-3deg] rounded-lg border-8 border-paper object-contain shadow sm:h-64 sm:w-56" /><Daisy className="h-16 w-16" /></div>
+    <h1 className="mt-6 max-w-2xl font-display text-4xl font-black leading-tight sm:text-6xl">Gửi những người phụ nữ <span className="block">của TranTrinh</span></h1>
+    <p className="mt-4 max-w-md text-muted-foreground">Một chút hoa, một chút meo, một lời chúc dành riêng cho bạn.</p>
+    <Button onClick={onStart} className="btn btn-primary mt-6 px-8 text-lg">Mở quà của mình</Button>
+    <p className="mt-8 text-sm">Thử demo: <strong>Nguyễn Ngọc Linh</strong> · keyword <strong>hoameo</strong><br />Nickname bất kỳ · hồ sơ mẫu là nhân vật hư cấu.</p>
+    <DemoNotice className="mt-6" />
+  </section>;
+}
+function Login({ onBack, onSuccess }: { onBack: () => void; onSuccess: (p: Profile, nickname: string) => void }) {
+  const [fullName, setFullName] = useState(""); const [nickname, setNickname] = useState(""); const [error, setError] = useState("");
+  const submit = (e: FormEvent) => { e.preventDefault(); if (!fullName.trim() || !nickname.trim()) return setError("Bạn nhớ nhập họ và tên cùng nickname nhé."); const p = findByName(fullName); if (!p) return setError("Meo chưa tìm thấy quà cho tên này. Bạn kiểm tra lại họ tên và dấu tiếng Việt nhé."); onSuccess(p, nickname.trim()); };
+  return <section className="animate-pop mx-auto max-w-md"><form onSubmit={submit} className="tape card-paper p-6 sm:p-8">
+    <h2 className="font-display text-2xl font-bold">Ai đó đang tới?</h2>
+    <label className="mt-6 block text-sm font-semibold" htmlFor="fullName">Họ và tên</label><input id="fullName" className="field mt-2" required value={fullName} maxLength={160} onChange={e => setFullName(e.target.value)} autoComplete="name" />
+    <label className="mt-4 block text-sm font-semibold" htmlFor="nick">Nickname</label><input id="nick" className="field mt-2" required maxLength={40} value={nickname} onChange={e => setNickname(e.target.value)} autoComplete="nickname" />
+    {error && <p role="alert" className="mt-3 text-sm text-destructive">{error}</p>}
+    <Button type="submit" className="btn btn-primary mt-6 w-full">Tiếp tục</Button><Button variant="outline" type="button" onClick={onBack} className="btn btn-ghost mt-3 w-full">Quay lại</Button>
+  </form></section>;
+}
+function Keyword({ profile, progress, onSuccess, onWrong, onBack }: { profile: Profile; progress: Progress; onSuccess: () => void; onWrong: () => void; onBack: () => void }) {
+  const [answer, setAnswer] = useState(""); const [error, setError] = useState(""); const [hint, setHint] = useState(false);
+  const submit = (e: FormEvent) => { e.preventDefault(); if (!verifyKeyword(profile, answer)) { onWrong(); setError("Từ khoá chưa đúng rồi. Bạn thử lại nhé!"); return; } onSuccess(); };
+  return <section className="animate-pop mx-auto max-w-lg"><p className="font-hand text-2xl text-primary">{fillNickname(profile.greeting, progress.nickname)}</p><form onSubmit={submit} className="tape card-paper mt-6 p-6 sm:p-8">
+    <h2 className="font-display text-2xl font-bold">{fillNickname(profile.keywordQuestion, progress.nickname)}</h2>
+    <label htmlFor="kw" className="mt-5 block text-sm font-semibold">Từ khoá bí mật</label><input id="kw" className="field mt-2" required value={answer} onChange={e => setAnswer(e.target.value)} autoComplete="off" autoCapitalize="none" />
+    {error && <p role="alert" className="mt-3 text-sm text-destructive">{error}</p>}
+    {hint && <p role="status" className="mt-3 text-sm">{profile.hint && !profile.hint.toLocaleLowerCase("vi").includes(profile.keyword.trim().toLocaleLowerCase("vi")) ? profile.hint : "Hãy nhớ lại từ khoá bạn được gửi nhé."}</p>}
+    <Button type="submit" className="btn btn-primary mt-5 w-full">Mở quà</Button>
+    <div className="mt-3 flex flex-wrap gap-2"><Button variant="secondary" type="button" onClick={() => setHint(true)}>Gợi ý</Button><Button variant="outline" type="button" onClick={onBack}>Đổi người nhận</Button></div>
+    {progress.attempts > 0 && <p className="mt-3 text-xs text-muted-foreground">Chưa đúng {progress.attempts} lần</p>}
+  </form></section>;
+}
+function Gifts({ profile, onOpen }: { profile: Profile; onOpen: (cat: number) => void }) {
+  return <section className="animate-pop text-center"><h2 className="font-display text-3xl font-bold">Chọn một meo mang hoa</h2><div className="mt-8 grid gap-4 sm:grid-cols-3">
+    {catPhotos.map((photo, i) => profile.memes[i]?.enabled && <Button key={photo.url} variant="outline" onClick={() => onOpen(i)} aria-label={profile.memes[i]?.caption} className="h-auto flex-col whitespace-normal rounded-lg bg-card p-3 shadow-sm transition-transform hover:-translate-y-1">
+      <img src={photo.url} alt={photo.alt} className="aspect-square w-full object-contain" /><span className="py-2 font-hand text-2xl">{profile.memes[i]?.caption}</span>
+    </Button>)}
+  </div></section>;
+}
+
+function Letter({ profile, progress, settings, isPreview, onReopen, onExit }: { profile: Profile; progress: Progress; settings: Settings; isPreview: boolean; onReopen: () => void; onExit: () => void }) {
+  const [replyOpen, setReplyOpen] = useState(false);
+  const n = progress.nickname;
+  return (
+    <section className="animate-pop">
+      <article className="tape card-paper relative overflow-hidden p-6 sm:p-10">
+        <Daisy className="absolute -right-4 -top-4 h-20 w-20 opacity-80" />
+        <Tulip className="absolute -bottom-2 left-2 h-20 w-10 opacity-70" />
+        <Portrait profile={profile} />
+        <p className="pr-14 font-hand text-2xl text-muted-foreground">{fillNickname(profile.greeting, n)}</p>
+        <h2 className="mt-2 font-display text-3xl font-bold leading-tight sm:text-4xl">{fillNickname(profile.wishTitle, n)}</h2>
+        <p className="mt-6 whitespace-pre-line text-lg leading-relaxed">{fillNickname(profile.wish, n)}</p>
+        <p className="mt-8 text-right font-hand text-2xl">— {profile.signature || settings.signature}</p>
+        <div className="mt-6 flex justify-center">
+          <figure className="text-center"><img src={catPhotos[progress.cat ?? 0]?.url} alt={catPhotos[progress.cat ?? 0]?.alt} className="h-40 w-40 rounded-lg object-contain" /><figcaption className="font-hand text-xl text-primary">{profile.memes[progress.cat ?? 0]?.caption}</figcaption></figure>
+        </div>
+      </article>
+
+      <div className="mt-6 grid gap-3 sm:grid-cols-2">
+        {profile.repliesEnabled && (
+          <Button className="btn btn-primary sm:col-span-2" onClick={() => setReplyOpen((v) => !v)} aria-expanded={replyOpen}>
+            Gửi một lời chúc lại cho mình 💌
+          </Button>
+        )}
+        <Button className="btn btn-ghost" onClick={onReopen}>Chọn lại ảnh mèo</Button>
+        {!isPreview && <Button className="btn btn-ghost" onClick={onExit}>Thoát</Button>}
+      </div>
+      {replyOpen && <ReplyForm profile={profile} nickname={n} isPreview={isPreview} />}
+    </section>
+  );
+}
+
+function ReplyForm({ profile, nickname, isPreview }: { profile: Profile; nickname: string; isPreview: boolean }) {
+  const [nick, setNick] = useState(nickname);
+  const [message, setMessage] = useState("");
+  const [state, setState] = useState<"idle" | "sending" | "done" | "error">("idle");
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    const d = getDraft(profile.id);
+    if (d && !isPreview) { setNick(d.nickname); setMessage(d.message); }
+  }, [profile.id, isPreview]);
+
+  useEffect(() => {
+    if (!isPreview && state !== "done") saveDraft(profile.id, { nickname: nick, message });
+  }, [nick, message, profile.id, isPreview, state]);
+
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    if (state === "sending" || state === "done") return;
+    if (isPreview) return setError("Chế độ xem trước không lưu lời nhắn.");
+    if (!nick.trim()) return setError("Cần biệt danh.");
+    if (!message.trim()) return setError("Bạn viết vài dòng nhé.");
+    if (message.length > MAX_REPLY) return setError(`Tối đa ${MAX_REPLY} ký tự.`);
+    setError("");
+    setState("sending");
+    try {
+      addReply({ profileId: profile.id, profileLabel: profile.label, nickname: nick.trim(), message: message.trim() });
+      saveDraft(profile.id, null);
+      setState("done");
+    } catch {
+      setState("error");
+      setError("Không lưu được (bộ nhớ trình duyệt có thể đã đầy). Bản nháp vẫn được giữ, thử lại nhé.");
+    }
+  };
+
+  if (state === "done")
+    return (
+      <div role="status" className="card-paper animate-pop mt-6 flex items-center gap-4 p-6">
+        <CatSticker mood="proud" className="h-20 w-20 shrink-0" />
+        <div>
+          <p className="font-display text-xl font-bold">Đã lưu lời nhắn trên trình duyệt này</p>
+          <p className="mt-1 text-sm text-muted-foreground">Đây là bản demo: lời nhắn chưa được gửi tới thiết bị khác. Bạn có thể xem nó trong mục Hộp thư của trang quản trị demo.</p>
+        </div>
+      </div>
+    );
+
+  return (
+    <form onSubmit={submit} noValidate className="card-paper animate-pop mt-6 p-6">
+      <h3 className="font-display text-xl font-bold">Viết lời chúc gửi lại</h3>
+      <p className="mt-2 rounded-xl bg-butter/70 px-3 py-2 text-sm">
+        Bản demo: lời nhắn chỉ được lưu trên trình duyệt này và hiện trong hộp thư quản trị demo — chưa thực sự gửi đi thiết bị khác.
+      </p>
+      <label className="mt-4 block text-sm font-semibold" htmlFor="rnick">Biệt danh</label>
+      <input id="rnick" className="field mt-1.5" value={nick} maxLength={40} onChange={(e) => setNick(e.target.value)} />
+      <label className="mt-4 block text-sm font-semibold" htmlFor="rmsg">Lời nhắn</label>
+      <textarea id="rmsg" className="field mt-1.5 min-h-36" value={message} maxLength={MAX_REPLY} onChange={(e) => setMessage(e.target.value)} placeholder="Cảm ơn bạn vì…" />
+      <p className="mt-1 text-right text-xs text-muted-foreground">{message.length}/{MAX_REPLY}</p>
+      {error && <p role="alert" className="mt-2 text-sm font-medium text-destructive">{error}</p>}
+      <Button type="submit" className="btn btn-primary mt-4 w-full" disabled={state === "sending"}>
+        {state === "sending" ? "Đang lưu…" : "Lưu lời nhắn"}
+      </Button>
+    </form>
+  );
+}
+

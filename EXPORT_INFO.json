@@ -1,0 +1,50 @@
+{
+  "project_id": "d307d052-fcbc-445e-b4cb-dc373dfeb799",
+  "source_commit": "68d5606b214638e4f4328bb197e797d5afce3058",
+  "export_date": "2026-10-20",
+  "original_text_files": 95,
+  "original_binary_files": 1,
+  "adaptations": [
+    "Standalone Vite/TanStack/Nitro configuration replacing Lovable build helper",
+    "Vercel build preset and npm lockfile",
+    "Asset manifest URLs point to bundled public/media files",
+    "README, .env.example and pending changes documentation"
+  ],
+  "media": [
+    {
+      "path": "public/media/love-like-you.mp3",
+      "size": 2418710,
+      "sha256": "4e2b155925568e1ffec34823c418bb4014a8164e812d18bc593ccf832cf5a129"
+    },
+    {
+      "path": "public/media/meo-mang-qua.jpg",
+      "size": 39711,
+      "sha256": "5f642a61d38b360a6512468461788853b8d15f1c29d00d841697f6c4299e0d3e"
+    },
+    {
+      "path": "public/media/meo-tang-hoa.jpg",
+      "size": 48850,
+      "sha256": "33b727f79d0afade5b3a65e5935264fcfaf9945c76e001d77ad46b9d7769bdb6"
+    },
+    {
+      "path": "public/media/meo-tung-hoa.jpg",
+      "size": 22267,
+      "sha256": "93d8d83dee33e81bfa5a5303ff8a1a41bdfa3789cae5a79dbf521453d7c6de80"
+    },
+    {
+      "path": "public/media/nhac-demo-1.wav",
+      "size": 256044,
+      "sha256": "a2813af566889505bc38b9891077c1bf60d7fb581421f3480573cb040bdccf20"
+    },
+    {
+      "path": "public/media/nhac-demo-2.wav",
+      "size": 256044,
+      "sha256": "6860b3fd7e80d7920c027c889ab74c29c0122aa38f6dd4db34cfe63f8f9e4928"
+    },
+    {
+      "path": "public/media/nhac-demo-3.wav",
+      "size": 256044,
+      "sha256": "f458474ae3ba95cebfaa616ea50a8679c304393276d77cfbb07a8e385863cf41"
+    }
+  ]
+}
