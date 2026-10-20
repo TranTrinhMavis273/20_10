@@ -33,9 +33,9 @@ export const Route = createFileRoute("/admin")({
   head: () => ({
     meta: [
       { title: `Quản trị — ${SITE_NAME}` },
-      { name: "description", content: "Chế độ quản trị demo: quản lý hồ sơ quà 20/10, hộp thư và cài đặt, lưu trên trình duyệt." },
+      { name: "description", content: "Quản trị: quản lý hồ sơ quà 20/10, hộp thư và cài đặt, lưu trên trình duyệt." },
       { property: "og:title", content: `Quản trị — ${SITE_NAME}` },
-      { property: "og:description", content: "Sandbox quản trị demo, dữ liệu lưu trên trình duyệt này." },
+      { property: "og:description", content: "Quản trị, dữ liệu lưu trên trình duyệt này." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
       { name: "robots", content: "noindex" },
@@ -54,7 +54,7 @@ function AdminGate() {
       <label htmlFor="admin-password" className="text-sm font-semibold">Mật khẩu quản trị</label><input id="admin-password" className="field mt-2" type="password" required autoComplete="current-password" value={password} onChange={e => setPassword(e.target.value)} />
       {error && <p role="alert" className="mt-3 text-destructive">{error}</p>}
       <Button disabled={busy} type="submit" className="btn btn-primary mt-5 w-full">{busy ? "Đang kiểm tra…" : "Đăng nhập quản trị"}</Button>
-    </form><p className="mt-5 text-sm text-muted-foreground">Bản demo: dữ liệu lưu trên trình duyệt này. Mật khẩu bảo vệ truy cập trang quản trị, không mã hoá dữ liệu cục bộ.</p>
+    </form><p className="mt-5 text-sm text-muted-foreground">Dữ liệu lưu trên trình duyệt này. Mật khẩu chỉ bảo vệ truy cập trang quản trị.</p>
   </main>;
 }
 
@@ -87,7 +87,7 @@ function Admin() {
       </header>
       <div className="mx-auto mt-4 max-w-5xl px-5">
         <div role="note" className="rounded-lg border border-dashed border-border bg-secondary/60 p-4 text-sm text-secondary-foreground">
-          <strong>Bản demo: dữ liệu lưu trên trình duyệt này.</strong> Trang quản trị kiểm tra mật khẩu trên máy chủ. Dữ liệu cục bộ không được mã hoá hay đồng bộ sang thiết bị khác; lời nhắn chưa thực sự gửi đi.
+          Dữ liệu và lời nhắn chỉ lưu trên trình duyệt này, không được mã hoá hay đồng bộ sang thiết bị khác.
         </div>
       </div>
 
@@ -111,9 +111,9 @@ function Admin() {
           </div>
           <Button
             className="mt-12 text-xs text-muted-foreground underline"
-            onClick={() => { if (confirm("Xoá toàn bộ dữ liệu demo trên trình duyệt này và khôi phục 3 hồ sơ mẫu?")) { resetDemo(); reload(); } }}
+            onClick={() => { if (confirm("Xoá toàn bộ dữ liệu trên trình duyệt này và khôi phục 3 hồ sơ ban đầu?")) { resetDemo(); reload(); } }}
           >
-            Khôi phục dữ liệu demo ban đầu
+            Khôi phục dữ liệu ban đầu
           </Button>
         </main>
       )}
@@ -253,7 +253,7 @@ function Editor({ initial, onClose }: { initial: Profile; onClose: () => void })
         <legend className="font-display text-xl font-bold">Nhạc riêng</legend>
         <div className="mt-4 grid gap-5 sm:grid-cols-2">
           {F({ k: "musicTitle", label: "Tên bài nhạc" })}{F({ k: "musicArtist", label: "Nghệ sĩ" })}
-          <div className="sm:col-span-2">{F({ k: "musicUrl", label: "URL nhạc trực tiếp", hint: "Cần HTTPS .mp3, .ogg hoặc .wav; không dùng trang YouTube/Spotify. Nhạc demo có sẵn là giai điệu nguyên bản, chưa phải bài hát của bạn." })}</div>
+          <div className="sm:col-span-2">{F({ k: "musicUrl", label: "URL nhạc trực tiếp", hint: "Cần HTTPS .mp3, .ogg hoặc .wav; không dùng trang YouTube/Spotify. " })}</div>
           <label className="flex items-center gap-3"><input type="checkbox" checked={p.musicEnabled} onChange={e => set("musicEnabled", e.target.checked)} />Bật nhạc riêng</label>
           <label className="flex items-center gap-3"><input type="checkbox" checked={p.musicLoop} onChange={e => set("musicLoop", e.target.checked)} />Lặp lại</label>
           <label className="flex flex-wrap items-center gap-3">Âm lượng mặc định <input aria-label="Âm lượng mặc định" type="range" min="0" max="1" step="0.05" value={p.musicVolume} onChange={e => set("musicVolume", Number(e.target.value))} /><span>{Math.round(p.musicVolume * 100)}%</span></label>

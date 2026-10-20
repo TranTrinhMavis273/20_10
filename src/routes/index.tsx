@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState, type FormEvent } from "react";
 import { z } from "zod";
 import { themeStyle } from "@/lib/theme";
-import { CatSticker, Daisy, DemoNotice, Petals, Tulip } from "@/components/Decor";
+import { CatSticker, ClickSparkles, Daisy, Petals, Tulip } from "@/components/Decor";
 import { Button } from "@/components/ui/button";
 import { useGlobalMusic } from "@/components/GlobalMusic";
 import { Portrait } from "@/components/Portrait";
@@ -58,9 +58,10 @@ function Index() {
   const unlocked = !!progress?.verified || isPreview;
   return <div style={themeStyle(settings)} className="relative min-h-screen overflow-x-hidden">
     <Petals enabled={settings.confetti} />
+    <ClickSparkles />
     <header className="relative z-10 mx-auto flex max-w-3xl items-center justify-between gap-3 px-5 pt-5">
       <Button variant="ghost" onClick={isPreview ? undefined : logout} className="h-auto min-w-0 justify-start whitespace-normal p-0 text-left" aria-label="Về trang đầu"><Daisy className="h-9 w-9 shrink-0" /><span><span className="block font-display text-sm font-bold sm:text-lg">{SITE_NAME}</span><span className="font-hand text-base text-muted-foreground">{settings.brandSubtitle}</span></span></Button>
-      {isPreview ? <span className="text-xs font-semibold text-accent-foreground">Xem trước · không tính thống kê</span> : <Link to="/admin" className="text-xs text-muted-foreground hover:underline">Quản trị demo</Link>}
+      {isPreview ? <span className="text-xs font-semibold text-accent-foreground">Xem trước</span> : <Link to="/admin" className="text-xs text-muted-foreground hover:underline">Quản trị</Link>}
     </header>
     <main className="relative z-10 mx-auto max-w-3xl px-5 pb-16 pt-6">
       {step === "landing" ? <Landing onStart={() => setStep("login")} /> : step === "login" ? <Login onBack={logout} onSuccess={(p, nickname) => {
@@ -73,18 +74,14 @@ function Index() {
         {unlocked && step === "gifts" && <Gifts profile={profile} onOpen={cat => { if (!isPreview && progress.cat === null) recordOpen(profile.id); update({ cat, step: "letter" }); }} />}
         {unlocked && step === "letter" && <Letter profile={profile} progress={progress} settings={settings} isPreview={isPreview} onReopen={() => update({ step: "gifts" })} onExit={logout} />}
       </> : <p>Không tìm thấy hồ sơ để xem trước.</p>}
-      {step !== "landing" && <DemoNotice className="mt-6" />}
     </main>
   </div>;
 }
 function Landing({ onStart }: { onStart: () => void }) {
   return <section className="animate-pop flex flex-col items-center text-center">
     <div className="relative flex items-end gap-3"><Tulip className="h-24 w-10" /><img src={catPhotos[0]?.url} alt={catPhotos[0]?.alt} className="h-56 w-48 rotate-[-3deg] rounded-lg border-8 border-paper object-contain shadow sm:h-64 sm:w-56" /><Daisy className="h-16 w-16" /></div>
-    <h1 className="mt-6 max-w-2xl font-display text-4xl font-black leading-tight sm:text-6xl">Gửi những người phụ nữ <span className="block">của TranTrinh</span></h1>
-    <p className="mt-4 max-w-md text-muted-foreground">Một chút hoa, một chút meo, một lời chúc dành riêng cho bạn.</p>
+    <h1 className="landing-title mt-6 w-full font-display font-black"><span>Gửi những người phụ nữ</span><span>của TranTrinh</span></h1>
     <Button onClick={onStart} className="btn btn-primary mt-6 px-8 text-lg">Mở quà của mình</Button>
-    <p className="mt-8 text-sm">Thử demo: <strong>Nguyễn Ngọc Linh</strong> · keyword <strong>hoameo</strong><br />Nickname bất kỳ · hồ sơ mẫu là nhân vật hư cấu.</p>
-    <DemoNotice className="mt-6" />
   </section>;
 }
 function Login({ onBack, onSuccess }: { onBack: () => void; onSuccess: (p: Profile, nickname: string) => void }) {
@@ -191,7 +188,6 @@ function ReplyForm({ profile, nickname, isPreview }: { profile: Profile; nicknam
         <CatSticker mood="proud" className="h-20 w-20 shrink-0" />
         <div>
           <p className="font-display text-xl font-bold">Đã lưu lời nhắn trên trình duyệt này</p>
-          <p className="mt-1 text-sm text-muted-foreground">Đây là bản demo: lời nhắn chưa được gửi tới thiết bị khác. Bạn có thể xem nó trong mục Hộp thư của trang quản trị demo.</p>
         </div>
       </div>
     );
@@ -199,9 +195,7 @@ function ReplyForm({ profile, nickname, isPreview }: { profile: Profile; nicknam
   return (
     <form onSubmit={submit} noValidate className="card-paper animate-pop mt-6 p-6">
       <h3 className="font-display text-xl font-bold">Viết lời chúc gửi lại</h3>
-      <p className="mt-2 rounded-xl bg-butter/70 px-3 py-2 text-sm">
-        Bản demo: lời nhắn chỉ được lưu trên trình duyệt này và hiện trong hộp thư quản trị demo — chưa thực sự gửi đi thiết bị khác.
-      </p>
+      <p className="mt-2 text-sm text-muted-foreground">Lời nhắn được lưu trên trình duyệt này.</p>
       <label className="mt-4 block text-sm font-semibold" htmlFor="rnick">Biệt danh</label>
       <input id="rnick" className="field mt-1.5" value={nick} maxLength={40} onChange={(e) => setNick(e.target.value)} />
       <label className="mt-4 block text-sm font-semibold" htmlFor="rmsg">Lời nhắn</label>

@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 
 type Mood = "love" | "shock" | "proud" | "sad" | "sleepy";
 
@@ -138,12 +138,38 @@ export function Petals({ enabled = true, count = 14 }: { enabled?: boolean; coun
   );
 }
 
-export function DemoNotice({ className = "" }: { className?: string }) {
-  return (
-    <p className={`rounded-lg border border-dashed border-border bg-secondary/60 px-3 py-1.5 text-center text-xs font-medium text-secondary-foreground ${className}`}>
-      Bản demo: dữ liệu lưu trên trình duyệt này.
-    </p>
-  );
+export function ClickSparkles() {
+  const [bursts, setBursts] = useState<{ id: number; x: number; y: number }[]>([]);
+  const sequence = useRef(0);
+  useEffect(() => {
+    const timers = new Set<ReturnType<typeof setTimeout>>();
+    const burst = (event: MouseEvent) => {
+      if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+      const target = event.target;
+      if (!(target instanceof Element) || target.closest("input, textarea, select")) return;
+      const rect = target.closest("button, a")?.getBoundingClientRect();
+      const id = sequence.current++;
+      const x = event.detail === 0 && rect ? rect.left + rect.width / 2 : event.clientX;
+      const y = event.detail === 0 && rect ? rect.top + rect.height / 2 : event.clientY;
+      setBursts(current => [...current.slice(-7), { id, x, y }]);
+      const timer = setTimeout(() => {
+        setBursts(current => current.filter(item => item.id !== id));
+        timers.delete(timer);
+      }, 800);
+      timers.add(timer);
+    };
+    document.addEventListener("click", burst);
+    return () => { document.removeEventListener("click", burst); timers.forEach(clearTimeout); };
+  }, []);
+  return <div className="pointer-events-none fixed inset-0 z-50 overflow-hidden" aria-hidden="true">
+    {bursts.map(burst => <div key={burst.id} className="absolute" style={{ left: burst.x, top: burst.y }}>
+      {Array.from({ length: 8 }, (_, i) => <span key={i} className="click-sparkle" style={{
+        "--spark-x": `${Math.cos(i * Math.PI / 4) * (48 + i % 3 * 12)}px`,
+        "--spark-y": `${Math.sin(i * Math.PI / 4) * 55 - 22}px`,
+        "--spark-turn": `${i % 2 ? 60 : -60}deg`,
+      } as CSSProperties}>{["🌸", "💖", "✨", "🐾"][i % 4]}</span>)}
+    </div>)}
+  </div>;
 }
 
 export function FloralSprig({ className = "" }: { className?: string }) {

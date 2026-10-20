@@ -86,6 +86,14 @@
 }
 
 .font-display { font-weight: 900; letter-spacing: 0; }
+.landing-title { font-size: clamp(1rem, 5.5vw, 3.5rem); line-height: 1.2; }
+.landing-title > span { display: block; white-space: nowrap; }
+.click-sparkle { position: absolute; left: -12px; top: -12px; font-size: 24px; animation: click-bloom .75s ease-out both; }
+@keyframes click-bloom {
+  0% { transform: translate(0, 0) scale(.3); opacity: 0; }
+  15% { opacity: 1; }
+  100% { transform: translate(var(--spark-x), var(--spark-y)) rotate(var(--spark-turn)) scale(.6); opacity: 0; }
+}
 .soundtrack-bar { position: fixed; z-index: 40; bottom: 14px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; width: min(440px, calc(100% - 24px)); padding: 8px 12px; background: var(--paper); border: 1px solid var(--border); border-radius: 8px; box-shadow: var(--shadow-card); }
 .portrait-frame { position: relative; width: min(260px, calc(100% - 24px)); margin: 30px auto; padding: 10px 10px 6px; background: var(--paper); border: 1px solid var(--border); transform: rotate(-2deg); box-shadow: var(--shadow-card); }
 .portrait-slot { aspect-ratio: 3 / 4; overflow: hidden; border-radius: 120px 120px 4px 4px; background: var(--accent); }
