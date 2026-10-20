@@ -16,7 +16,7 @@ Sao chép `.env.example` thành `.env`, thay `SITE_PASSWORD` bằng mật khẩu
 node -e "console.log(require('node:crypto').randomBytes(48).toString('hex'))"
 ```
 
-Dán chuỗi đó vào `SESSION_SECRET`. Không chia sẻ/commit `.env`; không thêm tiền tố `VITE_` cho hai biến này.
+Dán chuỗi đó vào `SESSION_SECRET`. Thêm `SUPABASE_URL` và `SUPABASE_SECRET_KEY` theo [hướng dẫn Supabase](supabase/README.md), rồi chạy `supabase/setup.sql`. Không chia sẻ/commit `.env`; không thêm tiền tố `VITE_` cho các biến bí mật.
 
 ```bash
 npm run dev
@@ -30,7 +30,7 @@ Mở địa chỉ Vite in ra trên terminal. Trang quản trị là `/admin`. C�
 2. Vercel → Add New → Project → Import repository.
 3. Chọn Node.js 24.x. Giữ Root Directory ở thư mục chứa `package.json`.
 4. Framework: TanStack Start nếu được nhận diện. File `vercel.json` đã đặt Install Command `npm ci` và Build Command `npm run build:vercel`. Để Output Directory mặc định, không đặt là `dist`.
-5. Trong Environment Variables, thêm `SITE_PASSWORD` và `SESSION_SECRET` như mô tả trên, ít nhất cho Production. Nếu muốn dùng Preview, bật cả Preview.
+5. Trong Environment Variables, thêm `SITE_PASSWORD`, `SESSION_SECRET`, `SUPABASE_URL` và `SUPABASE_SECRET_KEY` như mô tả trên, ít nhất cho Production. Nếu muốn dùng Preview, bật cả Preview.
 6. Deploy; sau khi đổi biến môi trường cần Redeploy để áp dụng.
 7. Mở `/` để thử luồng khách; mở `/admin` để đăng nhập.
 
@@ -44,18 +44,16 @@ Tài liệu: https://vercel.com/docs/frameworks/full-stack/tanstack-start
 - Bảng màu hồng; Fraunces, Be Vietnam Pro và Dancing Script (Google Fonts được tải khi truy cập mạng).
 - Bài Love Like You lặp, âm lượng mặc định 20%, trình phát chung xuyên suốt hành trình. Trình duyệt có thể chặn phát lúc vừa mở trang; lần tương tác đầu sẽ thử phát lại.
 - Ba ảnh mèo gốc, ba bản nhạc demo WAV và MP3 đã lưu thật trong `public/media/`.
-- Khung ảnh người nhận với tulip, hoa hồng và lá; tải ảnh riêng lưu bằng IndexedDB, tối đa 8MB trước xử lý.
+- Khung ảnh người nhận với tulip, hoa hồng và lá; tải ảnh riêng lên private Supabase Storage, tối đa 8MB trước xử lý; URL ảnh tạm thời được cấp sau xác minh.
 - Quản trị kiểm tra mật khẩu phía server; cookie HttpOnly/Secure; mật khẩu lấy từ biến môi trường.
 
-Thử: họ tên `Nguyễn Ngọc Linh`, nickname bất kỳ, keyword `hoameo`. Đây là hồ sơ hư cấu.
+## Dữ liệu dùng chung
 
-## Giới hạn quan trọng của bản xuất
+Hồ sơ, cài đặt, lượt mở và lời nhắn được lưu trên Supabase. Người nhận dùng cùng dữ liệu trên mọi thiết bị. Nhạc riêng hiện dùng URL HTTPS trực tiếp. Tiến trình nhận quà và lời nhắn chưa gửi nằm trong bộ nhớ của trang; mỗi lần tải lại phải xác minh lại.
 
-Dữ liệu hồ sơ, cài đặt, tiến trình và lời nhắn vẫn lưu bằng localStorage; ảnh tải lên lưu bằng IndexedDB. Chúng chỉ có trên trình duyệt/tên miền nơi nhập, KHÔNG đồng bộ giữa thiết bị hoặc từ Lovable sang Vercel. File ảnh/nhạc đã đóng gói trong mã nguồn dùng được trên mọi thiết bị; ảnh cá nhân được tải lên từ trang quản trị thì chưa có tính chất đó.
+Chạy `supabase/setup.sql` trước khi dùng. Database mới không tự tạo hồ sơ mẫu. Đăng nhập `/admin` để thêm hồ sơ hoặc bấm **Chuyển dữ liệu cũ lên Supabase** bằng đúng trình duyệt/tên miền từng tạo quà. Dữ liệu cũ và ảnh IndexedDB được giữ lại; import không ghi đè hồ sơ trên Supabase. Chi tiết: [supabase/README.md](supabase/README.md).
 
-Vì vậy bản này là demo triển khai được, chưa phải hệ thống gửi lời chúc cá nhân từ một trang quản trị chung cho nhiều máy. Muốn sử dụng như vậy cần chuyển hồ sơ/lời nhắn sang database và ảnh/nhạc riêng sang object storage, đồng thời bảo vệ API. Mật khẩu quản trị hiện chỉ bảo vệ trang quản trị, không bảo mật/mã hóa dữ liệu localStorage hoặc nội dung seed gửi xuống client. Chưa có giới hạn thử sai mật khẩu.
-
-Các sửa đổi yêu cầu ngay trước khi xuất nhưng CHƯA thực hiện do Lovable hết credits: cố định hero title đúng 2 dòng; tải file nhạc riêng trong admin (hiện dùng URL); chỉ bắt đầu nhạc tại nút đầu tiên thay vì thử autoplay lúc mount. Những yêu cầu này được giữ trong `PENDING_CHANGES.md` để tiếp tục sửa bằng code.
+Mọi API quản trị xác thực phiên HttpOnly trên máy chủ. Từ khoá được kiểm tra trên máy chủ; lời chúc và media chỉ được trả về sau khi đúng từ khoá. Các bảng bật RLS và không cấp quyền cho trình duyệt; secret key chỉ tồn tại phía máy chủ.
 
 ## Kiểm tra đã chạy trên bản Vercel
 

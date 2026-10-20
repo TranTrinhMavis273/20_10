@@ -3,15 +3,15 @@ import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useMemo, useState } from "react";
 import { CatSticker, Daisy } from "@/components/Decor";
 import {
-  duplicateProfile,
+  duplicateCloudProfile,
   emptyProfile,
-  getProfiles,
-  getReplies,
-  getSettings,
-  resetDemo,
-  saveReplies,
-  saveSettings,
-  upsertProfile,
+  loadAdminData,
+  legacySummary,
+  importLegacyData,
+  changeCloudReply,
+  saveCloudSettings,
+  saveCloudProfile,
+  uploadCloudPortrait,
   validateProfile,
   defaultSettings,
   SITE_NAME,
@@ -25,7 +25,7 @@ import { PersonalMusic } from "@/components/PersonalMusic";
 import { catPhotos } from "@/lib/gift-assets";
 import { themeStyle } from "@/lib/theme";
 import { adminLogin, adminLogout, adminStatus, requireAdmin } from "@/lib/admin-gate.functions";
-import { savePortrait } from "@/lib/portraits";
+import { compressPortrait } from "@/lib/portraits";
 import { Portrait } from "@/components/Portrait";
 
 export const Route = createFileRoute("/admin")({
@@ -33,9 +33,9 @@ export const Route = createFileRoute("/admin")({
   head: () => ({
     meta: [
       { title: `Quản trị — ${SITE_NAME}` },
-      { name: "description", content: "Quản trị: quản lý hồ sơ quà 20/10, hộp thư và cài đặt, lưu trên trình duyệt." },
+      { name: "description", content: "Quản lý hồ sơ quà 20/10, hộp thư và cài đặt." },
       { property: "og:title", content: `Quản trị — ${SITE_NAME}` },
-      { property: "og:description", content: "Quản trị, dữ liệu lưu trên trình duyệt này." },
+      { property: "og:description", content: "Quản lý quà và lời nhắn." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
       { name: "robots", content: "noindex" },
@@ -54,7 +54,7 @@ function AdminGate() {
       <label htmlFor="admin-password" className="text-sm font-semibold">Mật khẩu quản trị</label><input id="admin-password" className="field mt-2" type="password" required autoComplete="current-password" value={password} onChange={e => setPassword(e.target.value)} />
       {error && <p role="alert" className="mt-3 text-destructive">{error}</p>}
       <Button disabled={busy} type="submit" className="btn btn-primary mt-5 w-full">{busy ? "Đang kiểm tra…" : "Đăng nhập quản trị"}</Button>
-    </form><p className="mt-5 text-sm text-muted-foreground">Dữ liệu lưu trên trình duyệt này. Mật khẩu chỉ bảo vệ truy cập trang quản trị.</p>
+    </form>
   </main>;
 }
 
@@ -66,13 +66,21 @@ function Admin() {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [replies, setReplies] = useState<Reply[]>([]);
   const [settings, setSettings] = useState<Settings>(defaultSettings);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [importing, setImporting] = useState(false);
+  const [importStatus, setImportStatus] = useState("");
+  const [legacy, setLegacy] = useState({ profiles: 0, replies: 0 });
 
-  const reload = () => {
-    setProfiles(getProfiles());
-    setReplies(getReplies());
-    setSettings(getSettings());
+  const reload = async () => {
+    setLoading(true); setError("");
+    try {
+      const data = await loadAdminData();
+      setProfiles(data.profiles); setReplies(data.replies); setSettings(data.settings);
+    } catch (err) { setError(err instanceof Error ? err.message : 'Không tải được dữ liệu.'); }
+    finally { setLoading(false); }
   };
-  useEffect(reload, []);
+  useEffect(() => { setLegacy(legacySummary()); void reload(); }, []);
 
   const unread = replies.filter((r) => !r.read).length;
 
@@ -83,12 +91,23 @@ function Admin() {
           <Daisy className="h-9 w-9" />
           <span className="font-display text-lg font-bold">{settings.brandTitle}</span>
         </Link>
-        <Button variant="outline" onClick={async () => { await logout(); await router.invalidate(); }}>Đăng xuất</Button>
+        <div className="flex gap-2"><Button disabled={loading || importing} variant="outline" onClick={() => void reload()}>Làm mới</Button><Button disabled={importing} variant="outline" onClick={async () => { await logout(); await router.invalidate(); }}>Đăng xuất</Button></div>
       </header>
       <div className="mx-auto mt-4 max-w-5xl px-5">
         <div role="note" className="rounded-lg border border-dashed border-border bg-secondary/60 p-4 text-sm text-secondary-foreground">
-          Dữ liệu và lời nhắn chỉ lưu trên trình duyệt này, không được mã hoá hay đồng bộ sang thiết bị khác.
+          Hồ sơ, ảnh và lời nhắn được lưu trên Supabase, dùng chung trên các thiết bị.
         </div>
+        {error && <p role="alert" className="mt-4 text-destructive">{error} <button className="underline" onClick={() => void reload()}>Thử lại</button></p>}
+        {(legacy.profiles > 0 || legacy.replies > 0) && <section className="card-paper mt-4 p-4">
+          <p className="text-sm">Trình duyệt này có {legacy.profiles} hồ sơ và {legacy.replies} lời nhắn cũ. Chuyển một lần để người nhận mở được trên thiết bị khác. Hồ sơ đã có trên Supabase sẽ được giữ nguyên.</p>
+          <Button disabled={importing || loading || !!error} className="btn btn-primary mt-3" onClick={async () => {
+            setImporting(true); setImportStatus('Đang chuẩn bị…');
+            try { const result = await importLegacyData(setImportStatus); setImportStatus(`Đã chuyển ${result.imported} hồ sơ; giữ nguyên ${result.skipped} hồ sơ đã có. Lời nhắn đã được chuyển. Bản cũ vẫn được giữ trên trình duyệt.`); await reload(); }
+            catch (err) { setImportStatus(err instanceof Error ? err.message : 'Chuyển chưa hoàn tất. Bạn có thể thử lại; dữ liệu cũ vẫn còn.'); }
+            finally { setImporting(false); }
+          }}>{importing ? 'Đang chuyển…' : 'Chuyển dữ liệu cũ lên Supabase'}</Button>
+          {importStatus && <p role="status" className="mt-3 text-sm">{importStatus}</p>}
+        </section>}
       </div>
 
       {(
@@ -105,16 +124,12 @@ function Admin() {
             ))}
           </nav>
           <div className="mt-6">
-            {tab === "profiles" && <Profiles profiles={profiles} reload={reload} />}
-            {tab === "inbox" && <Inbox replies={replies} reload={reload} />}
-            {tab === "settings" && <SettingsPanel settings={settings} reload={reload} />}
+            {loading ? <p role="status">Đang tải dữ liệu…</p> : error ? null : importing ? <p role="status">Đang chuyển dữ liệu cũ…</p> : <>
+              {tab === "profiles" && <Profiles profiles={profiles} reload={reload} />}
+              {tab === "inbox" && <Inbox replies={replies} reload={reload} />}
+              {tab === "settings" && <SettingsPanel settings={settings} reload={reload} />}
+            </>}
           </div>
-          <Button
-            className="mt-12 text-xs text-muted-foreground underline"
-            onClick={() => { if (confirm("Xoá toàn bộ dữ liệu trên trình duyệt này và khôi phục 3 hồ sơ ban đầu?")) { resetDemo(); reload(); } }}
-          >
-            Khôi phục dữ liệu ban đầu
-          </Button>
         </main>
       )}
     </div>
@@ -127,6 +142,14 @@ function Profiles({ profiles, reload }: { profiles: Profile[]; reload: () => voi
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState<"all" | "draft" | "active" | "opened" | "inactive">("all");
   const [editing, setEditing] = useState<Profile | null>(null);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const run = async (action: () => Promise<unknown>) => {
+    if (busy) return; setBusy(true); setError("");
+    try { await action(); await reload(); }
+    catch (err) { setError(err instanceof Error ? err.message : 'Không lưu được hồ sơ.'); }
+    finally { setBusy(false); }
+  };
 
   const list = useMemo(() => {
     const s = q.trim().toLocaleLowerCase("vi");
@@ -139,10 +162,11 @@ function Profiles({ profiles, reload }: { profiles: Profile[]; reload: () => voi
   }, [profiles, q, filter]);
 
   if (editing)
-    return <Editor initial={editing} onClose={() => { setEditing(null); reload(); }} />;
+    return <Editor initial={editing} profiles={profiles} onClose={() => { setEditing(null); void reload(); }} />;
 
   return (
     <section>
+      {error && <p role="alert" className="mb-4 text-destructive">{error}</p>}
       <div className="flex flex-col gap-3 sm:flex-row">
         <input className="field" placeholder="Tìm theo tên, nhãn hoặc từ khoá…" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Tìm hồ sơ" />
         <select className="field sm:w-48" value={filter} onChange={(e) => setFilter(e.target.value as typeof filter)} aria-label="Lọc">
@@ -167,12 +191,12 @@ function Profiles({ profiles, reload }: { profiles: Profile[]; reload: () => voi
             <p className="mt-1 text-xs text-muted-foreground">Đã mở {p.openedCount} lần{p.lastOpenedAt ? ` · gần nhất ${new Date(p.lastOpenedAt).toLocaleString("vi-VN")}` : ""}</p>
             <div className="mt-4 flex flex-wrap gap-2">
               <Button className="btn btn-ghost min-h-11 px-4 text-sm" onClick={() => setEditing(p)}>Sửa</Button>
-              <Button className="btn btn-ghost min-h-11 px-4 text-sm" onClick={() => { duplicateProfile(p); reload(); }}>Nhân bản</Button>
+              <Button disabled={busy} className="btn btn-ghost min-h-11 px-4 text-sm" onClick={() => void run(() => duplicateCloudProfile(p))}>Nhân bản</Button>
               <a className="btn btn-ghost min-h-11 px-4 text-sm" href={`/?preview=${encodeURIComponent(p.id)}`} target="_blank" rel="noreferrer">Xem trước</a>
               {p.status !== "inactive" ? (
-                <Button className="btn btn-ghost min-h-11 px-4 text-sm" onClick={() => { if (confirm(`Tắt hồ sơ "${p.label}"? Người nhận sẽ không mở được nữa.`)) { upsertProfile({ ...p, status: "inactive" }); reload(); } }}>Tắt</Button>
+                <Button disabled={busy} className="btn btn-ghost min-h-11 px-4 text-sm" onClick={() => { if (confirm(`Tắt hồ sơ "${p.label}"? Người nhận sẽ không mở được nữa.`)) void run(() => saveCloudProfile({ ...p, status: "inactive" })); }}>Tắt</Button>
               ) : (
-                <Button className="btn btn-ghost min-h-11 px-4 text-sm" onClick={() => { upsertProfile({ ...p, status: "draft" }); reload(); }}>Chuyển về nháp</Button>
+                <Button disabled={busy} className="btn btn-ghost min-h-11 px-4 text-sm" onClick={() => void run(() => saveCloudProfile({ ...p, status: "draft" }))}>Chuyển về nháp</Button>
               )}
             </div>
           </li>
@@ -183,23 +207,28 @@ function Profiles({ profiles, reload }: { profiles: Profile[]; reload: () => voi
   );
 }
 
-function Editor({ initial, onClose }: { initial: Profile; onClose: () => void }) {
+function Editor({ initial, profiles, onClose }: { initial: Profile; profiles: Profile[]; onClose: () => void }) {
   const [p, setP] = useState<Profile>(initial);
   const [errors, setErrors] = useState<ValidationErrors>({});
   const [saved, setSaved] = useState("");
   const [photoError, setPhotoError] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const set = <K extends keyof Profile>(k: K, v: Profile[K]) => { setP((x) => ({ ...x, [k]: v })); setSaved(""); };
 
-  const save = (mode: "draft" | "active") => {
-    const all = getProfiles();
-    const e = validateProfile(p, mode, all);
+  const save = async (mode: "draft" | "active") => {
+    if (saving || uploading) return;
+    const e = validateProfile(p, mode, profiles);
     setErrors(e);
     if (Object.keys(e).length) { setSaved(""); return; }
     const next = { ...p, keyword: p.keyword.trim(), fullName: p.fullName.trim().replace(/\s+/g, " "), aliases: p.aliases.map(n => n.trim()).filter(Boolean), status: mode === "active" ? "active" : "draft" } as Profile;
-    upsertProfile(next);
-    setP(next);
-    setSaved(mode === "active" ? "Đã lưu và bật hồ sơ." : "Đã lưu nháp.");
+    setSaving(true); setSaveError("");
+    try {
+      await saveCloudProfile(next); setP(next);
+      setSaved(mode === "active" ? "Đã lưu và bật hồ sơ." : "Đã lưu nháp.");
+    } catch (err) { setSaveError(err instanceof Error ? err.message : 'Không lưu được hồ sơ.'); }
+    finally { setSaving(false); }
   };
 
   const F = ({ k, label, area, hint, type = "text" }: { k: keyof Profile; label: string; area?: boolean; hint?: string; type?: string }) => (
@@ -219,7 +248,7 @@ function Editor({ initial, onClose }: { initial: Profile; onClose: () => void })
     <section className="card-paper p-5 sm:p-8">
       <div className="flex items-center justify-between gap-2">
         <h2 className="font-display text-2xl font-bold">{initial.label ? "Sửa hồ sơ" : "Hồ sơ mới"}</h2>
-        <Button className="btn btn-ghost min-h-11 text-sm" onClick={onClose}>← Danh sách</Button>
+        <Button disabled={saving || uploading} className="btn btn-ghost min-h-11 text-sm" onClick={onClose}>← Danh sách</Button>
       </div>
       <div className="mt-6 grid gap-5 sm:grid-cols-2">
         {F({ k: "label", label: "Nhãn nội bộ", hint: "Chỉ hiện trong quản trị, người nhận không thấy." })}
@@ -237,11 +266,11 @@ function Editor({ initial, onClose }: { initial: Profile; onClose: () => void })
         <fieldset className="sm:col-span-2"><legend className="font-display text-xl">Ảnh chân dung người nhận</legend>
           <Portrait profile={p} />
           <label htmlFor="portrait-upload" className="block text-sm font-semibold">Tải / thay ảnh (JPG, PNG, WebP · tối đa 8 MB)</label>
-          <input id="portrait-upload" type="file" accept="image/jpeg,image/png,image/webp" disabled={uploading} className="field mt-2" onChange={async e => { const file = e.target.files?.[0]; if (!file) return; setUploading(true); setPhotoError(""); try { const id = await savePortrait(file); set("photoId", id); } catch (err) { setPhotoError(err instanceof Error ? err.message : "Không lưu được ảnh."); } finally { setUploading(false); e.target.value = ""; } }} />
-          <p className="mt-2 text-xs text-muted-foreground">Ảnh được thu nhỏ và lưu riêng trên trình duyệt này. Bấm lưu hồ sơ để giữ lựa chọn; ảnh tải lên được ưu tiên hơn URL.</p>
+          <input id="portrait-upload" type="file" accept="image/jpeg,image/png,image/webp" disabled={uploading || saving} className="field mt-2" onChange={async e => { const file = e.target.files?.[0]; if (!file) return; setUploading(true); setPhotoError(""); try { const photo = await uploadCloudPortrait(await compressPortrait(file)); setP(current => ({ ...current, ...photo })); setSaved(""); } catch (err) { setPhotoError(err instanceof Error ? err.message : "Không lưu được ảnh."); } finally { setUploading(false); e.target.value = ""; } }} />
+          <p className="mt-2 text-xs text-muted-foreground">Ảnh được thu nhỏ và lưu trên kho ảnh riêng. Bấm lưu hồ sơ để giữ lựa chọn; ảnh tải lên được ưu tiên hơn URL.</p>
           {uploading && <p role="status">Đang xử lý ảnh…</p>}{photoError && <p role="alert" className="text-destructive">{photoError}</p>}
           <div className="mt-4 grid gap-4 sm:grid-cols-2">{F({ k: "imageAlt", label: "Mô tả ảnh" })}<div><label htmlFor="portrait-fit" className="text-sm font-semibold">Cách hiển thị ảnh</label><select id="portrait-fit" className="field mt-1.5" value={p.imageFit} onChange={e => set("imageFit", e.target.value === "contain" ? "contain" : "cover")}><option value="cover">Lấp đầy khung chân dung</option><option value="contain">Hiện toàn bộ ảnh</option></select></div></div>
-          <Button variant="outline" className="mt-4" onClick={() => { setP(x => ({ ...x, photoId: "", imageUrl: "" })); setSaved(""); }}>Gỡ ảnh</Button>
+          <Button disabled={uploading || saving} variant="outline" className="mt-4" onClick={() => { setP(x => ({ ...x, photoId: "", photoUrl: "", imageUrl: "" })); setSaved(""); }}>Gỡ ảnh</Button>
           {p.photoId && <Button variant="ghost" className="mt-4" onClick={() => set("photoId", "")}>Dùng URL thay ảnh đã tải</Button>}
         </fieldset>
         <label className="flex min-h-12 items-center gap-3 text-sm font-semibold sm:col-span-2">
@@ -268,12 +297,13 @@ function Editor({ initial, onClose }: { initial: Profile; onClose: () => void })
           <input aria-label={`Chú thích ảnh ${i + 1}`} className="field mt-2" value={p.memes[i]?.caption ?? ""} onChange={e => set("memes", p.memes.map((m, j) => j === i ? { ...m, caption: e.target.value } : m))} />
         </div>)}</div>{errors.memes && <p role="alert" className="text-destructive">{errors.memes}</p>}
       </fieldset>
-      {saved && <p role="status" className="mt-5 rounded-xl bg-secondary px-4 py-3 text-sm font-medium text-secondary-foreground">{saved} (lưu trên trình duyệt này)</p>}
+      {saved && <p role="status" className="mt-5 rounded-xl bg-secondary px-4 py-3 text-sm font-medium text-secondary-foreground">{saved}</p>}
+      {saveError && <p role="alert" className="mt-4 text-destructive">{saveError}</p>}
       {Object.keys(errors).length > 0 && <p role="alert" className="mt-5 text-sm font-medium text-destructive">Vui lòng sửa các lỗi ở trên.</p>}
       <div className="mt-6 flex flex-wrap gap-3">
-        <Button className="btn btn-ghost" onClick={() => save("draft")}>Lưu nháp</Button>
-        <Button disabled={uploading} className="btn btn-primary" onClick={() => save("active")}>Lưu và bật</Button>
-        {getProfiles().some((x) => x.id === p.id) && (
+        <Button disabled={saving || uploading} className="btn btn-ghost" onClick={() => void save("draft")}>Lưu nháp</Button>
+        <Button disabled={uploading || saving} className="btn btn-primary" onClick={() => void save("active")}>{saving ? "Đang lưu…" : "Lưu và bật"}</Button>
+        {(profiles.some((x) => x.id === p.id) || saved) && (
           <a className="btn btn-sage" href={`/?preview=${encodeURIComponent(p.id)}`} target="_blank" rel="noreferrer">Xem trước</a>
         )}
       </div>
@@ -282,16 +312,23 @@ function Editor({ initial, onClose }: { initial: Profile; onClose: () => void })
 }
 
 function Inbox({ replies, reload }: { replies: Reply[]; reload: () => void }) {
-  const update = (list: Reply[]) => { saveReplies(list); reload(); };
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const update = async (id: string, patch: { read?: boolean; remove?: boolean }) => {
+    if (busy) return; setBusy(true); setError("");
+    try { await changeCloudReply(id, patch); await reload(); }
+    catch (err) { setError(err instanceof Error ? err.message : 'Không cập nhật được lời nhắn.'); }
+    finally { setBusy(false); }
+  };
   if (!replies.length)
     return (
       <div className="card-paper flex flex-col items-center p-10 text-center">
         <CatSticker mood="sleepy" caption="Chưa có thư nào…" className="h-28 w-28" />
-        <p className="mt-4 text-sm text-muted-foreground">Lời nhắn người nhận gửi trên trình duyệt này sẽ hiện ở đây.</p>
+        <p className="mt-4 text-sm text-muted-foreground">Lời nhắn từ người nhận sẽ hiện ở đây.</p>
       </div>
     );
   return (
-    <ul className="grid gap-4">
+    <div>{error && <p role="alert" className="mb-4 text-destructive">{error}</p>}<ul className="grid gap-4">
       {replies.map((r) => (
         <li key={r.id} className={`card-paper p-5 ${r.read ? "opacity-80" : "border-primary"}`} data-testid="reply">
           <div className="flex flex-wrap items-center justify-between gap-2">
@@ -301,20 +338,22 @@ function Inbox({ replies, reload }: { replies: Reply[]; reload: () => void }) {
           <p className="text-xs text-muted-foreground">{new Date(r.createdAt).toLocaleString("vi-VN")}</p>
           <p className="mt-3 whitespace-pre-line">{r.message}</p>
           <div className="mt-4 flex gap-2">
-            <Button className="btn btn-ghost min-h-11 text-sm" onClick={() => update(replies.map((x) => (x.id === r.id ? { ...x, read: !x.read } : x)))}>
+            <Button className="btn btn-ghost min-h-11 text-sm" disabled={busy} onClick={() => void update(r.id, { read: !r.read })}>
               {r.read ? "Đánh dấu chưa đọc" : "Đánh dấu đã đọc"}
             </Button>
-            <Button className="btn btn-ghost min-h-11 text-sm text-destructive" onClick={() => { if (confirm("Xoá lời nhắn này? Không thể hoàn tác.")) update(replies.filter((x) => x.id !== r.id)); }}>Xoá</Button>
+            <Button className="btn btn-ghost min-h-11 text-sm text-destructive" disabled={busy} onClick={() => { if (confirm("Xoá lời nhắn này? Không thể hoàn tác.")) void update(r.id, { remove: true }); }}>Xoá</Button>
           </div>
         </li>
       ))}
-    </ul>
+    </ul></div>
   );
 }
 
 function SettingsPanel({ settings, reload }: { settings: Settings; reload: () => void }) {
   const [s, setS] = useState(settings);
   const [ok, setOk] = useState(false);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
   const set = <K extends keyof Settings>(k: K, v: Settings[K]) => { setS({ ...s, [k]: v }); setOk(false); };
   return (
     <section className="card-paper grid gap-5 p-5 sm:grid-cols-2 sm:p-8">
@@ -327,9 +366,15 @@ function SettingsPanel({ settings, reload }: { settings: Settings; reload: () =>
         <input type="checkbox" className="h-5 w-5 accent-primary" checked={s.confetti} onChange={(e) => set("confetti", e.target.checked)} /> Hiệu ứng cánh hoa rơi
       </label>
       <div className="flex flex-wrap items-center gap-3 sm:col-span-2">
-        <Button className="btn btn-primary" onClick={() => { saveSettings(s); setOk(true); reload(); }}>Lưu cài đặt</Button>
+        <Button disabled={busy} className="btn btn-primary" onClick={async () => {
+          setBusy(true); setError(""); setOk(false);
+          try { await saveCloudSettings(s); setOk(true); }
+          catch (err) { setError(err instanceof Error ? err.message : 'Không lưu được cài đặt.'); }
+          finally { setBusy(false); }
+        }}>{busy ? 'Đang lưu…' : 'Lưu cài đặt'}</Button>
         <Button className="btn btn-ghost" onClick={() => setS(defaultSettings)}>Về mặc định</Button>
-        {ok && <span role="status" className="text-sm font-medium text-secondary-foreground">Đã lưu trên trình duyệt này.</span>}
+        {error && <p role="alert" className="text-destructive">{error}</p>}
+        {ok && <span role="status" className="text-sm font-medium text-secondary-foreground">Đã lưu trên Supabase.</span>}
       </div>
     </section>
   );

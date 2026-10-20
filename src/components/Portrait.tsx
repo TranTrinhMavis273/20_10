@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { loadPortrait } from "@/lib/portraits";
-import type { Profile } from "@/lib/store";
+import { loadCloudPortrait, type Profile } from "@/lib/store";
 import { FloralSprig } from "@/components/Decor";
 
 export function Portrait({ profile }: { profile: Profile }) {
@@ -9,12 +9,15 @@ export function Portrait({ profile }: { profile: Profile }) {
   useEffect(() => {
     setBroken(false); setLocalUrl("");
     let alive = true; let url = "";
-    if (profile.photoId) void loadPortrait(profile.photoId).then(blob => {
+    if (profile.photoId.startsWith('cloud:') && !profile.photoUrl) void loadCloudPortrait(profile.photoId).then(signed => {
+      if (alive) setLocalUrl(signed);
+    }).catch(() => setBroken(true));
+    else if (profile.photoId && !profile.photoId.startsWith('cloud:')) void loadPortrait(profile.photoId).then(blob => {
       if (alive && blob) { url = URL.createObjectURL(blob); setLocalUrl(url); }
     }).catch(() => {});
     return () => { alive = false; if (url) URL.revokeObjectURL(url); };
-  }, [profile.photoId, profile.imageUrl]);
-  const src = profile.photoId ? localUrl : profile.imageUrl;
+  }, [profile.photoId, profile.imageUrl, profile.photoUrl]);
+  const src = profile.photoId ? profile.photoUrl || localUrl : profile.imageUrl;
   return <figure className="portrait-frame">
     <div className="portrait-slot">
       {src && !broken ? <img src={src} alt={profile.imageAlt || `Chân dung ${profile.fullName}`} onError={() => setBroken(true)} className={`h-full w-full ${profile.imageFit === "contain" ? "object-contain" : "object-cover"}`} /> : <div className="flex h-full flex-col items-center justify-center bg-accent px-5 text-center"><FloralSprig className="h-36 w-28" /><span className="font-display text-xl font-extrabold">Một bông hoa<br />mang tên bạn</span></div>}

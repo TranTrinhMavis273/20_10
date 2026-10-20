@@ -1,6 +1,6 @@
 import { demoMusicUrls, defaultMemes } from "@/lib/gift-assets";
-// Browser-local demo storage. All reads/writes go through this module so a
-// future backend (auth + DB) can replace it without touching the UI.
+// Shared data is accessed through the cloud facade below. The synchronous local
+// functions remain solely for importing existing browser records and old tests.
 
 export type ProfileStatus = "draft" | "active" | "inactive";
 
@@ -32,6 +32,7 @@ export type Profile = {
   imageAlt: string;
   imageFit: "cover" | "contain";
   photoId: string;
+  photoUrl?: string; // Temporary signed URL; never persisted in the database.
   repliesEnabled: boolean;
   openedCount: number;
   lastOpenedAt: string | null;
@@ -378,5 +379,62 @@ export function resetDemo() {
   Object.keys(localStorage)
     .filter((k) => k.startsWith("mh."))
     .forEach((k) => localStorage.removeItem(k));
+}
+
+// ---------- shared server storage (the only store used by the live UI) ----------
+const cloud = () => import('./gift.functions');
+export const loadCloudSettings = async () => (await cloud()).siteSettings();
+export const loadAdminData = async () => (await cloud()).adminData();
+export const findCloudGift = async (name: string) => (await cloud()).findGift({ data: { name } });
+export const unlockCloudGift = async (id: string, answer: string) => (await cloud()).unlockGift({ data: { id, answer } });
+export const exitCloudGift = async () => (await cloud()).exitGift();
+export const previewCloudGift = async (id: string) => (await cloud()).previewGift({ data: { id } });
+export const recordCloudOpen = async (id: string) => (await cloud()).openGift({ data: { id } });
+export const saveCloudProfile = async (profile: Profile) => (await cloud()).adminSaveProfile({ data: profile });
+export const saveCloudSettings = async (settings: Settings) => (await cloud()).adminSaveSettings({ data: settings });
+export const changeCloudReply = async (id: string, patch: { read?: boolean; remove?: boolean }) => (await cloud()).adminChangeReply({ data: { id, ...patch } });
+export const sendCloudReply = async (id: string, nickname: string, message: string, replyId: string) =>
+  (await cloud()).sendGiftReply({ data: { id, nickname, message, replyId } });
+export const loadCloudPortrait = async (photoId: string) => (await cloud()).adminPortrait({ data: { photoId } });
+export async function duplicateCloudProfile(p: Profile) {
+  const now = new Date().toISOString();
+  await saveCloudProfile({ ...p, id: uid(), label: `${p.label} (bản sao)`, keyword: '', status: 'draft', openedCount: 0, lastOpenedAt: null, createdAt: now, updatedAt: now });
+}
+async function blobBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(',')[1] ?? '');
+    reader.onerror = () => reject(new Error('Không đọc được ảnh.'));
+    reader.readAsDataURL(blob);
+  });
+}
+export async function uploadCloudPortrait(blob: Blob) {
+  return (await cloud()).adminUploadPortrait({ data: { base64: await blobBase64(blob) } });
+}
+export function legacySummary() {
+  return { profiles: read<Profile[]>(K.profiles, []).length, replies: getReplies().length };
+}
+export function exportLegacyBackup() {
+  return { profiles: read<Profile[]>(K.profiles, []), replies: getReplies(), settings: getSettings() };
+}
+export async function importLegacyData(onProgress: (message: string) => void) {
+  // Read only existing profiles: never seed sample records during migration.
+  const profiles = read<Profile[]>(K.profiles, []).map(migrateProfile);
+  const existingIds = new Set((await loadAdminData()).profiles.map(p => p.id));
+  const { loadPortrait } = await import('./portraits');
+  const converted: Profile[] = [];
+  for (const [i, p] of profiles.entries()) {
+    if (existingIds.has(p.id)) continue;
+    onProgress(`Đang chuyển hồ sơ ${i + 1}/${profiles.length}…`);
+    if (p.photoId && !p.photoId.startsWith('cloud:')) {
+      const blob = await loadPortrait(p.photoId);
+      if (!blob) throw new Error(`Không tìm thấy ảnh của ${p.fullName || p.label}. Mở bằng trình duyệt đã tải ảnh rồi thử lại.`);
+      converted.push({ ...p, ...await uploadCloudPortrait(blob) });
+    } else converted.push(p);
+  }
+  onProgress('Đang lưu hồ sơ và lời nhắn…');
+  const result = await (await cloud()).adminImportLegacy({ data: { profiles: converted, replies: getReplies(), settings: getSettings() } });
+  // Retain local records and IndexedDB as a backup; retries skip cloud records.
+  return { ...result, skipped: result.skipped + profiles.filter(p => existingIds.has(p.id)).length };
 }
 

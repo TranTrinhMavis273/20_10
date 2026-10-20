@@ -11,7 +11,7 @@ function database(): Promise<IDBDatabase> {
     request.onerror = () => reject(new Error("Không mở được bộ nhớ ảnh."));
   });
 }
-export async function savePortrait(file: File): Promise<string> {
+export async function compressPortrait(file: File): Promise<Blob> {
   validatePhoto(file);
   const bitmap = await createImageBitmap(file);
   const scale = Math.min(1, 1200 / Math.max(bitmap.width, bitmap.height));
@@ -21,6 +21,11 @@ export async function savePortrait(file: File): Promise<string> {
   if (!context) { bitmap.close(); throw new Error("Không xử lý được ảnh."); }
   context.drawImage(bitmap, 0, 0, canvas.width, canvas.height); bitmap.close();
   const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob(b => b ? resolve(b) : reject(new Error("Không lưu được ảnh.")), "image/jpeg", .85));
+  if (blob.size > 2 * 1024 * 1024) throw new Error('Ảnh sau nén vẫn quá lớn. Bạn chọn ảnh nhỏ hơn nhé.');
+  return blob;
+}
+export async function savePortrait(file: File): Promise<string> {
+  const blob = await compressPortrait(file);
   const id = crypto.randomUUID(); const db = await database();
   await new Promise<void>((resolve, reject) => {
     const tx = db.transaction("photos", "readwrite"); tx.objectStore("photos").put(blob, id);
